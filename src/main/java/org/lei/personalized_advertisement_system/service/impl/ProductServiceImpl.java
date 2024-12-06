@@ -10,10 +10,12 @@ import org.lei.personalized_advertisement_system.service.UserService;
 import org.lei.personalized_advertisement_system.util.StringToListUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -56,7 +58,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public Page<ProductDTO> getAllProducts(Integer page, Integer size) {
-        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "sales"));
         return productRepository.findAll(pageRequest).map(this::convertToProductDTO);
     }
 
@@ -66,30 +68,45 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public List<ProductDTO> getRecommendedProducts(String username) {
-        List<String> preferences = userService.getPreferencesByUsername(username);
-
-        if (preferences == null || preferences.isEmpty()) {
-            return productRepository.findTop12ByOrderBySalesDesc().stream()
-                    .map(this::convertToProductDTO)
-                    .collect(Collectors.toList());
-        }
-
-        return productRepository.findAll().stream()
-                .filter(product -> preferences.stream().anyMatch(product.getCategories()::contains))
-                .map(this::convertToProductDTO)
-                .collect(Collectors.toList());
+    public List<ProductDTO> getPopularProducts() {
+        return productRepository.findTop12ByOrderBySalesDesc().stream().map(this::convertToProductDTO).collect(Collectors.toList());
     }
 
     @Override
-    public List<ProductDTO> getPopularProducts() {
-        List<Product> popularProducts = productRepository.findTop12ByOrderBySalesDesc();
+    public List<ProductDTO> getRecommendedProducts(String username) {
+        List<String> preferences = userService.getPreferencesByUsername(username);
+        List<ProductDTO> recommendedProducts = new ArrayList<>();
 
-        // 转换为 DTO 列表返回
-        return popularProducts.stream()
-                .map(this::convertToProductDTO)
-                .toList();
+        if (preferences != null && !preferences.isEmpty()) {
+            for (String category : preferences) {
+                List<ProductDTO> categoryProducts = productRepository.findProductsByCategory(category, PageRequest.of(0, 12))
+                        .stream()
+                        .map(this::convertToProductDTO)
+                        .toList();
+
+                recommendedProducts.addAll(categoryProducts);
+
+                if (recommendedProducts.size() >= 12) {
+                    break;
+                }
+            }
+        }
+
+        if (recommendedProducts.size() < 12) {
+            int productsToAdd = 12 - recommendedProducts.size();
+            List<Long> existingProductIds = recommendedProducts.stream()
+                    .map(ProductDTO::getId)
+                    .collect(Collectors.toList());
+
+            List<ProductDTO> additionalProducts = productRepository.findAdditionalProducts(existingProductIds, PageRequest.of(0, productsToAdd)).stream()
+                    .map(this::convertToProductDTO)
+                    .toList();
+
+            recommendedProducts.addAll(additionalProducts);
+        }
+        return recommendedProducts;
     }
+
 
     @Override
     public Product getProductById(Long id) {

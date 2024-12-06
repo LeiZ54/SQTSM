@@ -2,35 +2,47 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/api';
 import Slider from 'react-slick';
 import Layout from '../components/Layout';
-import ProductCard from '../components/ProductCard';
-import { useNavigate } from 'react-router-dom';
+import ProductList from '../components/ProductList';
 import { toast } from 'react-toastify';
 
 function HomePage() {
   const [ads, setAds] = useState([]);
   const [products, setProducts] = useState([]);
-  const navigate = useNavigate();
-  const [user, setUser] = useState(null);
 
+  // Fetch ads from the `/home/ads` endpoint
   useEffect(() => {
-    const storedUser = localStorage.getItem('loggedInUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+    const token = localStorage.getItem('token');
+    const fetchAds = async () => {
+      try {
+        const config = token
+          ? { headers: { Authorization: `Bearer ${token}` } }
+          : {};
+        const response = await api.get('/home/ads', config);
+        setAds(response.data);
+      } catch (error) {
+        toast.error('Failed to load ads. Please try again.');
+        console.error('Failed to fetch ads:', error);
+      }
+    };
 
-    api
-      .get('/')
-      .then((response) => {
-        const { ads, products } = response.data;
-        setAds(ads);
-        setProducts(products);
-      })
-      .catch((error) => {
-        toast.error('Failed to load data. Please try again.');
-        console.error('Failed to fetch home page data:', error);
-      });
+    const fetchProducts = async () => {
+      try {
+        const config = token
+          ? { headers: { Authorization: `Bearer ${token}` } }
+          : {};
+        const response = await api.get('/home/products', config);
+        setProducts(response.data);
+      } catch (error) {
+        toast.error('Failed to load products. Please try again.');
+        console.error('Failed to fetch products:', error);
+      }
+    };
+
+    fetchAds();
+    fetchProducts();
   }, []);
 
+  // Slider settings for the ad carousel
   const sliderSettings = {
     dots: true,
     infinite: true,
@@ -41,6 +53,7 @@ function HomePage() {
     autoplaySpeed: 3000,
   };
 
+  // Handle ad click event
   const handleAdClick = (adId) => {
     api
       .put(`/ad/click/${adId}`)
@@ -51,34 +64,13 @@ function HomePage() {
         console.error('Failed to update ad click count:', error);
         toast.error('Failed to register ad click.');
       });
-    navigate(`/ad/${adId}`);
-  };
-
-  const handleAddToCart = (productId) => {
-    if (!user) {
-      toast.error('Please log in to add items to the cart.');
-      return;
-    }
-
-    api
-      .post(
-        '/cart',
-        { productId, quantity: 1 },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-      )
-      .then(() => {
-        toast.success('Item added to cart successfully!');
-      })
-      .catch((error) => {
-        console.error('Failed to add item to cart:', error);
-        toast.error('Failed to add item to cart.');
-      });
+    window.open(`/ad/${adId}`, '_blank');
   };
 
   return (
     <Layout>
       <main className="p-8">
-        {/* Advertisement Section */}
+        {/* Ads Section */}
         <section className="mb-8">
           <Slider {...sliderSettings}>
             {ads.map((ad) => (
@@ -101,17 +93,15 @@ function HomePage() {
           </Slider>
         </section>
 
+        {/* Products Section */}
         <section>
-          <h2 className="text-3xl font-bold mb-4">Picked For You</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                handleAddToCart={handleAddToCart}
-              />
-            ))}
-          </div>
+          <h2 className="text-3xl font-bold mb-4">Picked For You!</h2>
+          <p className="text-gray-500 mb-4">
+            Check out products we picked just for you!
+          </p>
+          <ProductList
+            products={products}
+          />
         </section>
       </main>
     </Layout>
